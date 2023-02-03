@@ -61,28 +61,37 @@ router.patch("/:id", async function (req, res, next) {
     if ("id" in req.body) {
       throw new ExpressError("Not allowed", 400);
     }
-
-    const result = await db.query(
-      `UPDATE invoices
-             SET comp_code=$1, amt=$2, paid=$3, add_date=$4, paid_date=$5
-             WHERE id = $6
-             RETURNING comp_code, amt, paid, add_date, paid_date`,
-      [
-        req.body.comp_code,
-        req.body.amt,
-        req.body.paid,
-        req.body.add_date,
-        req.body.paid_date,
-        req.params.id,
-      ]
+    const currResult = await db.query(
+      `SELECT paid
+       FROM invoices
+       WHERE id = $1`,
+      [id]
     );
 
-    if (result.rows.length === 0) {
+    if (currResult.rows.length === 0) {
       throw new ExpressError(
-        `There is no company with id of '${req.params.id}`,
+        `There is no invoice with id of '${req.params.id}`,
         404
       );
     }
+
+    const currPaidDate = currResult.rows[0].paid_date;
+
+    if (!currPaidDate && paid) {
+      paidDate = new Date();
+    } else if (!paid) {
+      paidDate = null;
+    } else {
+      paidDate = currPaidDate;
+    }
+
+    const result = await db.query(
+      `UPDATE invoices
+       SET amt=$1, paid=$2, paid_date=$3
+       WHERE id=$4
+       RETURNING id, comp_code, amt, paid, add_date, paid_date`,
+      [amt, paid, paidDate, id]
+    );
 
     return res.json({ invoice: result.rows[0] });
   } catch (err) {
